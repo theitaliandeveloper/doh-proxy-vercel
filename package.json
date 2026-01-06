@@ -1,0 +1,12 @@
+{
+  "name": "doh-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DNS over HTTPS Proxy with Vercel",
+  "license": "ISC",
+  "author": "Vichingo455",
+  "type": "module",
+  "engines": {
+    "node": "18.x"
+  }
+}

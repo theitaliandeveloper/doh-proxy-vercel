@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "api/dns-query.js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/dns-query",
+      "destination": "/api/dns-query"
+    },
+    {
+      "source": "/",
+      "destination": "/api"
+    }
+  ]
+}
