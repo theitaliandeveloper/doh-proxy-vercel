@@ -1,65 +1,68 @@
-import pkg from "../package.json" assert { type: "json" };
-export default async function handler(req, res) {
-  const method = req.method;
+export const config = {
+  runtime: "edge"
+};
 
+export default async function handler(req) {
+  const { searchParams } = new URL(req.url);
+
+  // Fallback values
+  const version = process.env.APP_VERSION ?? "1.0.0-beta";
+  const author = process.env.APP_AUTHOR ?? "Vichingo455";
+
+  // Browser / info request
   if (
-    method === "GET" &&
-    !req.query.dns &&
-    req.headers.accept !== "application/dns-message"
+    req.method === "GET" &&
+    !searchParams.has("dns") &&
+    req.headers.get("accept") !== "application/dns-message"
   ) {
-    res.setHeader("Content-Type", "text/plain");
-    return res.status(200).send(
-      `DNS over HTTPS Proxy by ${pkg.author} (v${pkg.version})`
+    return new Response(
+      `DNS over HTTPS Proxy by ${author} (v${version})`,
+      {
+        status: 200,
+        headers: { "Content-Type": "text/plain" }
+      }
     );
   }
 
-  if (method !== "GET" && method !== "POST") {
-    return res.status(405).end();
+  if (req.method !== "GET" && req.method !== "POST") {
+    return new Response(null, { status: 405 });
   }
 
   const upstream = "https://cloudflare-dns.com/dns-query";
 
-  const headers = {
-    "Accept": "application/dns-message",
-    "Content-Type": "application/dns-message",
-    "User-Agent": "Vercel-DoH-Proxy"
-  };
+  let upstreamReq;
 
-  try {
-    let upstreamRes;
-
-    if (method === "GET") {
-      // ?dns=BASE64URL
-      const dns = req.query.dns;
-      if (!dns) {
-        return res.status(400).send("Missing dns parameter");
-      }
-
-      upstreamRes = await fetch(`${upstream}?dns=${dns}`, {
-        method: "GET",
-        headers
-      });
-    } else {
-      // POST body (raw DNS message)
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const body = Buffer.concat(chunks);
-
-      upstreamRes = await fetch(upstream, {
-        method: "POST",
-        headers,
-        body
-      });
+  if (req.method === "GET") {
+    const dns = searchParams.get("dns");
+    if (!dns) {
+      return new Response("Missing dns parameter", { status: 400 });
     }
 
-    const buffer = Buffer.from(await upstreamRes.arrayBuffer());
-
-    res.setHeader("Content-Type", "application/dns-message");
-    res.setHeader("Cache-Control", "no-store");
-    res.status(upstreamRes.status).send(buffer);
-
-  } catch (err) {
-    console.error(err);
-    res.status(502).send("Upstream DoH error");
+    upstreamReq = fetch(`${upstream}?dns=${dns}`, {
+      headers: {
+        "Accept": "application/dns-message",
+        "User-Agent": `DoH-Proxy/${version}`
+      }
+    });
+  } else {
+    upstreamReq = fetch(upstream, {
+      method: "POST",
+      headers: {
+        "Accept": "application/dns-message",
+        "Content-Type": "application/dns-message",
+        "User-Agent": `DoH-Proxy/${version}`
+      },
+      body: await req.arrayBuffer()
+    });
   }
+
+  const upstreamRes = await upstreamReq;
+
+  return new Response(upstreamRes.body, {
+    status: upstreamRes.status,
+    headers: {
+      "Content-Type": "application/dns-message",
+      "Cache-Control": "no-store"
+    }
+  });
 }
